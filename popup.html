@@ -3,33 +3,45 @@
 <head>
   <style>
     body {
-      width: 220px;
-      font-family: Arial;
+      width: 240px;
+      font-family: Arial, sans-serif;
       padding: 10px;
+    }
+
+    label {
+      font-size: 12px;
+      font-weight: bold;
     }
 
     input {
       width: 100%;
       margin-bottom: 8px;
+      padding: 4px;
     }
 
     button {
       width: 100%;
+      margin-top: 6px;
+      padding: 6px;
+      cursor: pointer;
     }
   </style>
 </head>
 <body>
-
-  <label>X</label>
+  <label>X coordinate</label>
   <input id="x" type="number">
 
-  <label>Y</label>
+  <label>Y coordinate</label>
   <input id="y" type="number">
 
-  <label>Interval (ms)</label>
+  <label>Interval milliseconds</label>
   <input id="interval" type="number">
 
   <button id="save">Save</button>
+  <button id="pick">Pick Coordinate</button>
+  <button id="test">Test Click Once</button>
+  <button id="start">Start</button>
+  <button id="stop">Stop</button>
 
   <script src="popup.js"></script>
 </body>
