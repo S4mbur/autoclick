@@ -1,0 +1,12 @@
+{
+  "manifest_version": 3,
+  "name": "Auto Coordinate Clicker",
+  "version": "1.0",
+  "description": "Automatically clicks a fixed coordinate on a monitoring page.",
+  "content_scripts": [
+    {
+      "matches": ["http://*/ *", "https://*/ *"],
+      "js": ["content.js"]
+    }
+  ]
+}
