@@ -1,47 +1,310 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
 <head>
+  <meta charset="UTF-8">
   <style>
+    :root {
+      --bg: #f6f8fc;
+      --ink: #182033;
+      --muted: #667085;
+      --line: #d8deea;
+      --blue: #2563eb;
+      --green: #16a34a;
+      --red: #dc2626;
+      --amber: #d97706;
+      --white: #ffffff;
+    }
+
+    * {
+      box-sizing: border-box;
+    }
+
     body {
-      width: 240px;
+      width: 320px;
+      margin: 0;
+      color: var(--ink);
       font-family: Arial, sans-serif;
-      padding: 10px;
+      background:
+        linear-gradient(135deg, rgba(37, 99, 235, 0.16), rgba(22, 163, 74, 0.12)),
+        var(--bg);
+    }
+
+    .app {
+      padding: 14px;
+    }
+
+    .header {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 12px;
+    }
+
+    h1 {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.2;
+      letter-spacing: 0;
+    }
+
+    .subtitle {
+      margin: 3px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .status-pill {
+      min-width: 82px;
+      padding: 7px 9px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: var(--white);
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-align: center;
+      text-transform: uppercase;
+    }
+
+    .status-card {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 12px;
+      background: var(--white);
+      box-shadow: 0 10px 22px rgba(31, 41, 55, 0.08);
+      transition: border-color 150ms ease, background 150ms ease;
+    }
+
+    .status-card.running {
+      border-color: rgba(22, 163, 74, 0.45);
+      background: #ecfdf3;
+    }
+
+    .status-card.stopped {
+      border-color: rgba(220, 38, 38, 0.34);
+      background: #fff5f5;
+    }
+
+    .status-card.unavailable {
+      border-color: rgba(217, 119, 6, 0.38);
+      background: #fffbeb;
+    }
+
+    .status-line {
+      display: grid;
+      grid-template-columns: 14px 1fr;
+      gap: 9px;
+      align-items: start;
+      margin-bottom: 11px;
+    }
+
+    .status-dot {
+      width: 12px;
+      height: 12px;
+      margin-top: 2px;
+      border-radius: 50%;
+      background: var(--red);
+      box-shadow: 0 0 0 4px rgba(220, 38, 38, 0.12);
+    }
+
+    .running .status-dot {
+      background: var(--green);
+      box-shadow: 0 0 0 4px rgba(22, 163, 74, 0.14);
+      animation: pulse 1.2s ease-in-out infinite;
+    }
+
+    .unavailable .status-dot {
+      background: var(--amber);
+      box-shadow: 0 0 0 4px rgba(217, 119, 6, 0.14);
+    }
+
+    @keyframes pulse {
+      0%, 100% {
+        transform: scale(1);
+      }
+      50% {
+        transform: scale(1.22);
+      }
+    }
+
+    .status-title {
+      display: block;
+      font-size: 14px;
+      line-height: 1.25;
+    }
+
+    .status-detail {
+      display: block;
+      margin-top: 2px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .run-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+    }
+
+    .settings {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 10px;
+      margin-top: 12px;
+    }
+
+    .field-full {
+      grid-column: 1 / -1;
     }
 
     label {
-      font-size: 12px;
-      font-weight: bold;
+      display: grid;
+      gap: 5px;
+      color: var(--muted);
+      font-size: 11px;
+      font-weight: 700;
+      text-transform: uppercase;
     }
 
     input {
       width: 100%;
-      margin-bottom: 8px;
-      padding: 4px;
+      min-height: 36px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 8px 10px;
+      color: var(--ink);
+      font-size: 14px;
+      font-weight: 700;
+      background: var(--white);
+      outline: none;
+    }
+
+    input:focus {
+      border-color: rgba(37, 99, 235, 0.75);
+      box-shadow: 0 0 0 3px rgba(37, 99, 235, 0.14);
+    }
+
+    .tool-actions {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 8px;
+      margin-top: 12px;
     }
 
     button {
-      width: 100%;
-      margin-top: 6px;
-      padding: 6px;
+      min-height: 38px;
+      border: 0;
+      border-radius: 8px;
+      padding: 9px 10px;
+      color: var(--white);
+      font-size: 13px;
+      font-weight: 700;
       cursor: pointer;
+      transition: transform 120ms ease, opacity 120ms ease, filter 120ms ease;
+    }
+
+    button:hover:not(:disabled) {
+      transform: translateY(-1px);
+    }
+
+    button:disabled {
+      cursor: not-allowed;
+      opacity: 0.52;
+      filter: saturate(0.65);
+    }
+
+    .btn-start {
+      background: var(--green);
+    }
+
+    .btn-stop {
+      background: var(--red);
+    }
+
+    .btn-save {
+      background: var(--blue);
+    }
+
+    .btn-pick {
+      background: #7c3aed;
+    }
+
+    .btn-test {
+      grid-column: 1 / -1;
+      background: var(--amber);
+    }
+
+    .feedback {
+      min-height: 22px;
+      margin: 10px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.35;
+    }
+
+    .feedback.success {
+      color: var(--green);
+      font-weight: 700;
+    }
+
+    .feedback.error {
+      color: var(--red);
+      font-weight: 700;
     }
   </style>
 </head>
 <body>
-  <label>X coordinate</label>
-  <input id="x" type="number">
+  <main class="app">
+    <header class="header">
+      <div>
+        <h1>Auto Clicker</h1>
+        <p class="subtitle">Tab-only coordinate clicking</p>
+      </div>
+      <div id="statusPill" class="status-pill">Status</div>
+    </header>
 
-  <label>Y coordinate</label>
-  <input id="y" type="number">
+    <section id="statusCard" class="status-card stopped" aria-live="polite">
+      <div class="status-line">
+        <span class="status-dot" aria-hidden="true"></span>
+        <div>
+          <strong id="statusTitle" class="status-title">Stopped</strong>
+          <span id="statusDetail" class="status-detail">Start to click only the current active tab.</span>
+        </div>
+      </div>
+      <div class="run-actions">
+        <button id="start" class="btn-start" type="button">Start</button>
+        <button id="stop" class="btn-stop" type="button">Stop</button>
+      </div>
+    </section>
 
-  <label>Interval milliseconds</label>
-  <input id="interval" type="number">
+    <section class="settings" aria-label="Click settings">
+      <label>
+        X coordinate
+        <input id="x" type="number" min="0" step="1">
+      </label>
 
-  <button id="save">Save</button>
-  <button id="pick">Pick Coordinate</button>
-  <button id="test">Test Click Once</button>
-  <button id="start">Start</button>
-  <button id="stop">Stop</button>
+      <label>
+        Y coordinate
+        <input id="y" type="number" min="0" step="1">
+      </label>
+
+      <label class="field-full">
+        Interval milliseconds
+        <input id="interval" type="number" min="50" step="50">
+      </label>
+    </section>
+
+    <section class="tool-actions" aria-label="Tools">
+      <button id="save" class="btn-save" type="button">Save</button>
+      <button id="pick" class="btn-pick" type="button">Pick Coordinate</button>
+      <button id="test" class="btn-test" type="button">Test Click Once</button>
+    </section>
+
+    <p id="feedback" class="feedback" role="status"></p>
+  </main>
 
   <script src="popup.js"></script>
 </body>
