@@ -5,6 +5,10 @@ const DEFAULT_SETTINGS = {
 };
 
 const OVERLAY_ID = "auto-coordinate-clicker-status";
+const OVERLAY_POSITION_DEFAULTS = {
+  overlayLeft: null,
+  overlayTop: null
+};
 
 let intervalId = null;
 let pickMode = false;
@@ -13,6 +17,8 @@ let overlayHost = null;
 let overlayMode = "running";
 let overlayTimer = null;
 let latestSettings = { ...DEFAULT_SETTINGS };
+let overlayPositionLoaded = false;
+let overlayDrag = null;
 
 function normalizeSettings(settings = {}) {
   return {
@@ -46,6 +52,88 @@ function formatInterval(ms) {
   return `${ms} ms`;
 }
 
+function clampOverlayPosition(left, top) {
+  const rect = overlayHost?.getBoundingClientRect();
+  const width = rect?.width || 272;
+  const height = rect?.height || 130;
+  const padding = 8;
+
+  return {
+    left: Math.min(Math.max(padding, Math.round(left)), Math.max(padding, window.innerWidth - width - padding)),
+    top: Math.min(Math.max(padding, Math.round(top)), Math.max(padding, window.innerHeight - height - padding))
+  };
+}
+
+function applyOverlayPosition(left, top, persist = false) {
+  if (!overlayHost) return;
+
+  const pos = clampOverlayPosition(left, top);
+  overlayHost.style.left = `${pos.left}px`;
+  overlayHost.style.top = `${pos.top}px`;
+  overlayHost.style.right = "auto";
+
+  if (persist) {
+    chrome.storage.local.set({
+      overlayLeft: pos.left,
+      overlayTop: pos.top
+    });
+  }
+}
+
+function applyDefaultOverlayPosition() {
+  if (!overlayHost) return;
+
+  const rect = overlayHost.getBoundingClientRect();
+  const width = rect.width || 272;
+  applyOverlayPosition(window.innerWidth - width - 16, 16);
+}
+
+function loadOverlayPosition() {
+  if (overlayPositionLoaded || !overlayHost) return;
+
+  overlayPositionLoaded = true;
+  chrome.storage.local.get(OVERLAY_POSITION_DEFAULTS, saved => {
+    if (!overlayHost) return;
+
+    if (Number.isFinite(Number(saved.overlayLeft)) && Number.isFinite(Number(saved.overlayTop))) {
+      applyOverlayPosition(Number(saved.overlayLeft), Number(saved.overlayTop));
+    } else {
+      applyDefaultOverlayPosition();
+    }
+  });
+}
+
+function startOverlayDrag(event) {
+  if (!overlayHost || event.button !== 0) return;
+
+  event.preventDefault();
+  event.stopPropagation();
+
+  const rect = overlayHost.getBoundingClientRect();
+  overlayDrag = {
+    pointerId: event.pointerId,
+    offsetX: event.clientX - rect.left,
+    offsetY: event.clientY - rect.top
+  };
+
+  event.currentTarget.setPointerCapture?.(event.pointerId);
+}
+
+function moveOverlayDrag(event) {
+  if (!overlayDrag || event.pointerId !== overlayDrag.pointerId) return;
+
+  event.preventDefault();
+  applyOverlayPosition(event.clientX - overlayDrag.offsetX, event.clientY - overlayDrag.offsetY);
+}
+
+function endOverlayDrag(event) {
+  if (!overlayDrag || event.pointerId !== overlayDrag.pointerId) return;
+
+  event.preventDefault();
+  applyOverlayPosition(event.clientX - overlayDrag.offsetX, event.clientY - overlayDrag.offsetY, true);
+  overlayDrag = null;
+}
+
 function ensureOverlay() {
   if (overlayHost && document.documentElement.contains(overlayHost)) {
     return overlayHost;
@@ -57,6 +145,7 @@ function ensureOverlay() {
   overlayHost.style.top = "16px";
   overlayHost.style.right = "16px";
   overlayHost.style.zIndex = "2147483647";
+  overlayHost.style.userSelect = "none";
 
   const root = overlayHost.attachShadow({ mode: "open" });
   root.innerHTML = `
@@ -90,6 +179,29 @@ function ensureOverlay() {
       .panel.tested {
         border-color: rgba(217, 119, 6, 0.5);
         background: #fffbeb;
+      }
+
+      .drag-handle {
+        display: flex;
+        align-items: center;
+        justify-content: space-between;
+        gap: 8px;
+        margin: -2px -2px 8px;
+        padding: 4px 5px;
+        border-radius: 6px;
+        color: #667085;
+        font-size: 11px;
+        font-weight: 700;
+        cursor: move;
+        touch-action: none;
+      }
+
+      .drag-handle:hover {
+        background: rgba(15, 23, 42, 0.06);
+      }
+
+      .drag-dots {
+        letter-spacing: 1px;
       }
 
       .top {
@@ -169,6 +281,10 @@ function ensureOverlay() {
       }
     </style>
     <div class="panel running">
+      <div class="drag-handle" data-drag-handle title="Drag to move this panel">
+        <span>Move panel</span>
+        <span class="drag-dots">⋮⋮</span>
+      </div>
       <div class="top">
         <div class="dot"></div>
         <div>
@@ -200,7 +316,14 @@ function ensureOverlay() {
     stopClicker();
   });
 
+  const dragHandle = root.querySelector("[data-drag-handle]");
+  dragHandle.addEventListener("pointerdown", startOverlayDrag);
+  dragHandle.addEventListener("pointermove", moveOverlayDrag);
+  dragHandle.addEventListener("pointerup", endOverlayDrag);
+  dragHandle.addEventListener("pointercancel", endOverlayDrag);
+
   document.documentElement.appendChild(overlayHost);
+  requestAnimationFrame(loadOverlayPosition);
   return overlayHost;
 }
 
@@ -210,6 +333,8 @@ function hideOverlay() {
   if (overlayHost) {
     overlayHost.remove();
     overlayHost = null;
+    overlayPositionLoaded = false;
+    overlayDrag = null;
   }
 }
 
@@ -467,6 +592,13 @@ document.addEventListener("click", function handler(e) {
   showTemporaryOverlay("saved", latestSettings);
   console.log("Coordinate picked:", latestSettings.x, latestSettings.y);
 }, true);
+
+window.addEventListener("resize", () => {
+  if (!overlayHost) return;
+
+  const rect = overlayHost.getBoundingClientRect();
+  applyOverlayPosition(rect.left, rect.top, true);
+});
 
 getStoredSettings(settings => {
   latestSettings = settings;
