@@ -22,96 +22,115 @@ let overlayDrag = null;
 
 // ===== INSTANCE PROTECTION =====
 if (window.__AUTOCLICKER_INSTANCE__) {
-    try {
-        window.__AUTOCLICKER_INSTANCE__.destroy();
-    } catch (e) {
-        console.log("Old instance cleanup failed:", e);
-    }
+  try {
+    window.__AUTOCLICKER_INSTANCE__.destroy();
+  } catch (e) {
+    console.log("Old instance cleanup failed:", e);
+  }
 }
 
 let registeredListeners = [];
 let registeredObservers = [];
+let registeredRuntimeListeners = [];
 
 function addSafeListener(target, type, handler, options) {
-    target.addEventListener(type, handler, options);
+  target.addEventListener(type, handler, options);
 
-    registeredListeners.push({
-        target,
-        type,
-        handler,
-        options
-    });
+  registeredListeners.push({
+    target,
+    type,
+    handler,
+    options
+  });
 }
 
 function addSafeObserver(observer) {
-    registeredObservers.push(observer);
+  registeredObservers.push(observer);
+}
+
+function addSafeRuntimeMessageListener(handler) {
+  chrome.runtime.onMessage.addListener(handler);
+  registeredRuntimeListeners.push(handler);
 }
 
 function cleanup() {
+  if (intervalId) {
+    clearInterval(intervalId);
+    intervalId = null;
+  }
 
-    if (intervalId) {
-        clearInterval(intervalId);
-        intervalId = null;
-    }
-
-    registeredListeners.forEach(l => {
-        try {
-            l.target.removeEventListener(
-                l.type,
-                l.handler,
-                l.options
-            );
-        } catch (e) {}
-    });
-
-    registeredListeners = [];
-
-    registeredObservers.forEach(o => {
-        try {
-            o.disconnect();
-        } catch (e) {}
-    });
-
-    registeredObservers = [];
-
+  registeredListeners.forEach(l => {
     try {
-        if (overlayHost && overlayHost.parentNode) {
-            overlayHost.parentNode.removeChild(overlayHost);
-        }
+      l.target.removeEventListener(l.type, l.handler, l.options);
     } catch (e) {}
+  });
 
-    overlayHost = null;
-    overlayDrag = null;
+  registeredListeners = [];
+
+  registeredObservers.forEach(o => {
+    try {
+      o.disconnect();
+    } catch (e) {}
+  });
+
+  registeredObservers = [];
+
+  registeredRuntimeListeners.forEach(handler => {
+    try {
+      chrome.runtime.onMessage.removeListener(handler);
+    } catch (e) {}
+  });
+
+  registeredRuntimeListeners = [];
+
+  window.clearTimeout(overlayTimer);
+  overlayTimer = null;
+  pickMode = false;
+  running = false;
+  setPickCursor(false);
+
+  try {
+    if (overlayHost && overlayHost.parentNode) {
+      overlayHost.parentNode.removeChild(overlayHost);
+    }
+  } catch (e) {}
+
+  overlayHost = null;
+  overlayDrag = null;
+  overlayPositionLoaded = false;
 }
 
 function destroy() {
-    cleanup();
+  cleanup();
 
-    if (
-        window.__AUTOCLICKER_INSTANCE__ &&
-        window.__AUTOCLICKER_INSTANCE__.destroy === destroy
-    ) {
-        delete window.__AUTOCLICKER_INSTANCE__;
-    }
+  if (
+    window.__AUTOCLICKER_INSTANCE__ &&
+    window.__AUTOCLICKER_INSTANCE__.destroy === destroy
+  ) {
+    delete window.__AUTOCLICKER_INSTANCE__;
+  }
 }
 
 window.__AUTOCLICKER_INSTANCE__ = {
-    destroy
+  destroy
 };
 
-window.addEventListener("beforeunload", destroy);
-
-
-  
-
-
-
+addSafeListener(window, "beforeunload", destroy);
 
 function normalizeSettings(settings = {}) {
   return {
-    x: Number.isFinite(Number(settings.x)) ? Math.round(Number(settings.x)) : DEFAULT_SETTINGS.x,
-    y: Number.isFinite(Number(settings.y)) ? Math.round(Number(settings.y)) : DEFAULT_SETTINGS.y,
-    interval: Math.max(50, Number.isFinite(Number(settings.interval)) ? Math.round(Number(settings.interval)) : DEFAULT_SETTINGS.interval)
+    x: Number.isFinite(Number(settings.x))
+      ? Math.round(Number(settings.x))
+      : DEFAULT_SETTINGS.x,
+    y: Number.isFinite(Number(settings.y))
+      ? Math.round(Number(settings.y))
+      : DEFAULT_SETTINGS.y,
+    interval: Math.max(
+      50,
+      Number.isFinite(Number(settings.interval))
+        ? Math.round(Number(settings.interval))
+        : DEFAULT_SETTINGS.interval
+    )
   };
 }
 
@@ -122,12 +141,15 @@ function getStoredSettings(callback) {
 }
 
 function notifyStatus() {
-  chrome.runtime.sendMessage({
-    action: "tabStatusChanged",
-    running
-  }, () => {
-    chrome.runtime.lastError;
-  });
+  chrome.runtime.sendMessage(
+    {
+      action: "tabStatusChanged",
+      running
+    },
+    () => {
+      chrome.runtime.lastError;
+    }
+  );
 }
 
 function formatInterval(ms) {
@@ -146,8 +168,14 @@ function clampOverlayPosition(left, top) {
   const padding = 8;
 
   return {
-    left: Math.min(Math.max(padding, Math.round(left)), Math.max(padding, window.innerWidth - width - padding)),
-    top: Math.min(Math.max(padding, Math.round(top)), Math.max(padding, window.innerHeight - height - padding))
+    left: Math.min(
+      Math.max(padding, Math.round(left)),
+      Math.max(padding, window.innerWidth - width - padding)
+    ),
+    top: Math.min(
+      Math.max(padding, Math.round(top)),
+      Math.max(padding, window.innerHeight - height - padding)
+    )
   };
 }
 
@@ -182,7 +210,10 @@ function loadOverlayPosition() {
   chrome.storage.local.get(OVERLAY_POSITION_DEFAULTS, saved => {
     if (!overlayHost) return;
 
-    if (Number.isFinite(Number(saved.overlayLeft)) && Number.isFinite(Number(saved.overlayTop))) {
+    if (
+      Number.isFinite(Number(saved.overlayLeft)) &&
+      Number.isFinite(Number(saved.overlayTop))
+    ) {
       applyOverlayPosition(Number(saved.overlayLeft), Number(saved.overlayTop));
     } else {
       applyDefaultOverlayPosition();
@@ -210,14 +241,21 @@ function moveOverlayDrag(event) {
   if (!overlayDrag || event.pointerId !== overlayDrag.pointerId) return;
 
   event.preventDefault();
-  applyOverlayPosition(event.clientX - overlayDrag.offsetX, event.clientY - overlayDrag.offsetY);
+  applyOverlayPosition(
+    event.clientX - overlayDrag.offsetX,
+    event.clientY - overlayDrag.offsetY
+  );
 }
 
 function endOverlayDrag(event) {
   if (!overlayDrag || event.pointerId !== overlayDrag.pointerId) return;
 
   event.preventDefault();
-  applyOverlayPosition(event.clientX - overlayDrag.offsetX, event.clientY - overlayDrag.offsetY, true);
+  applyOverlayPosition(
+    event.clientX - overlayDrag.offsetX,
+    event.clientY - overlayDrag.offsetY,
+    true
+  );
   overlayDrag = null;
 }
 
@@ -383,7 +421,9 @@ function ensureOverlay() {
     </div>
   `;
 
-  root.querySelector("[data-action]").addEventListener("click", event => {
+  const actionButton = root.querySelector("[data-action]");
+
+  addSafeListener(actionButton, "click", event => {
     event.preventDefault();
     event.stopPropagation();
 
@@ -404,10 +444,10 @@ function ensureOverlay() {
   });
 
   const dragHandle = root.querySelector("[data-drag-handle]");
-  dragHandle.addEventListener("pointerdown", startOverlayDrag);
-  dragHandle.addEventListener("pointermove", moveOverlayDrag);
-  dragHandle.addEventListener("pointerup", endOverlayDrag);
-  dragHandle.addEventListener("pointercancel", endOverlayDrag);
+  addSafeListener(dragHandle, "pointerdown", startOverlayDrag);
+  addSafeListener(dragHandle, "pointermove", moveOverlayDrag);
+  addSafeListener(dragHandle, "pointerup", endOverlayDrag);
+  addSafeListener(dragHandle, "pointercancel", endOverlayDrag);
 
   document.documentElement.appendChild(overlayHost);
   requestAnimationFrame(loadOverlayPosition);
@@ -416,6 +456,7 @@ function ensureOverlay() {
 
 function hideOverlay() {
   window.clearTimeout(overlayTimer);
+  overlayTimer = null;
 
   if (overlayHost) {
     overlayHost.remove();
@@ -458,7 +499,9 @@ function updateOverlay(mode, settings = latestSettings) {
   }
 
   title.textContent = "Auto Clicker is running";
-  detail.textContent = `X:${latestSettings.x} Y:${latestSettings.y} - every ${formatInterval(latestSettings.interval)}`;
+  detail.textContent = `X:${latestSettings.x} Y:${latestSettings.y} - every ${formatInterval(
+    latestSettings.interval
+  )}`;
   action.textContent = "Stop";
 }
 
@@ -538,13 +581,15 @@ function doClick(x, y) {
   showClickPulse(x, y);
 
   ["mousedown", "mouseup", "click"].forEach(type => {
-    el.dispatchEvent(new MouseEvent(type, {
-      view: window,
-      bubbles: true,
-      cancelable: true,
-      clientX: x,
-      clientY: y
-    }));
+    el.dispatchEvent(
+      new MouseEvent(type, {
+        view: window,
+        bubbles: true,
+        cancelable: true,
+        clientX: x,
+        clientY: y
+      })
+    );
   });
 
   console.log("Auto clicked:", x, y, el);
@@ -648,9 +693,9 @@ function handleMessage(message, _sender, sendResponse) {
   return false;
 }
 
-chrome.runtime.onMessage.addListener(handleMessage);
+addSafeRuntimeMessageListener(handleMessage);
 
-document.addEventListener("click", function handler(e) {
+function handleDocumentClick(e) {
   if (!pickMode) return;
 
   const path = typeof e.composedPath === "function" ? e.composedPath() : [];
@@ -678,14 +723,18 @@ document.addEventListener("click", function handler(e) {
 
   showTemporaryOverlay("saved", latestSettings);
   console.log("Coordinate picked:", latestSettings.x, latestSettings.y);
-}, true);
+}
 
-window.addEventListener("resize", () => {
+addSafeListener(document, "click", handleDocumentClick, true);
+
+function handleWindowResize() {
   if (!overlayHost) return;
 
   const rect = overlayHost.getBoundingClientRect();
   applyOverlayPosition(rect.left, rect.top, true);
-});
+}
+
+addSafeListener(window, "resize", handleWindowResize);
 
 getStoredSettings(settings => {
   latestSettings = settings;
