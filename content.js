@@ -20,6 +20,93 @@ let latestSettings = { ...DEFAULT_SETTINGS };
 let overlayPositionLoaded = false;
 let overlayDrag = null;
 
+// ===== INSTANCE PROTECTION =====
+if (window.__AUTOCLICKER_INSTANCE__) {
+    try {
+        window.__AUTOCLICKER_INSTANCE__.destroy();
+    } catch (e) {
+        console.log("Old instance cleanup failed:", e);
+    }
+}
+
+let registeredListeners = [];
+let registeredObservers = [];
+
+function addSafeListener(target, type, handler, options) {
+    target.addEventListener(type, handler, options);
+
+    registeredListeners.push({
+        target,
+        type,
+        handler,
+        options
+    });
+}
+
+function addSafeObserver(observer) {
+    registeredObservers.push(observer);
+}
+
+function cleanup() {
+
+    if (intervalId) {
+        clearInterval(intervalId);
+        intervalId = null;
+    }
+
+    registeredListeners.forEach(l => {
+        try {
+            l.target.removeEventListener(
+                l.type,
+                l.handler,
+                l.options
+            );
+        } catch (e) {}
+    });
+
+    registeredListeners = [];
+
+    registeredObservers.forEach(o => {
+        try {
+            o.disconnect();
+        } catch (e) {}
+    });
+
+    registeredObservers = [];
+
+    try {
+        if (overlayHost && overlayHost.parentNode) {
+            overlayHost.parentNode.removeChild(overlayHost);
+        }
+    } catch (e) {}
+
+    overlayHost = null;
+    overlayDrag = null;
+}
+
+function destroy() {
+    cleanup();
+
+    if (
+        window.__AUTOCLICKER_INSTANCE__ &&
+        window.__AUTOCLICKER_INSTANCE__.destroy === destroy
+    ) {
+        delete window.__AUTOCLICKER_INSTANCE__;
+    }
+}
+
+window.__AUTOCLICKER_INSTANCE__ = {
+    destroy
+};
+
+window.addEventListener("beforeunload", destroy);
+
+
+  
+
+
+
+
 function normalizeSettings(settings = {}) {
   return {
     x: Number.isFinite(Number(settings.x)) ? Math.round(Number(settings.x)) : DEFAULT_SETTINGS.x,
